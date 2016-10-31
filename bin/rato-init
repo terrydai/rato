@@ -1,0 +1,187 @@
+#!/usr/bin/env node
+
+var program = require('commander')
+var exists = require('fs').existsSync
+var os = require('os')
+var chalk = require('chalk')
+var path = require('path')
+var {basename, extname} = path;
+var rm = require('rimraf').sync
+var Metalsmith = require('metalsmith');
+var inquirer = require('inquirer');
+var async = require('async');
+// var meta = require('./meta.json')
+var handlebars = require('handlebars')
+
+/**
+ * Usage.
+ */
+
+program
+  .usage('<template-name> [webapp-name]')
+  // .option('-c, --clone', 'use git clone')
+
+/**
+ * Help.
+ */
+
+program.on('--help', function () {
+  console.log('  Examples:')
+  console.log()
+  console.log(chalk.gray('    # create a new webapp with a template'))
+  console.log('    $ rato init webpack my-webapp')
+  console.log()
+  // console.log(chalk.gray('    # create a new webapp straight from a github template'))
+  // console.log('    $ rato init username/repo my-webapp')
+  // console.log()
+})
+
+/**
+ * Help.
+ */
+
+function help () {
+  program.parse(process.argv)
+  if (program.args.length < 1) return program.help()
+}
+help()
+
+/**
+ * Padding.
+ */
+
+console.log()
+process.on('exit', function () {
+  console.log()
+})
+
+/**
+ * Settings.
+ */
+
+var template = program.args[0]
+var rawName = program.args[1]
+var inPlace = !rawName || rawName === '.'  //未指定项目名
+var name = inPlace ? process.cwd() : path.resolve(rawName)
+
+console.log( name )
+var to = path.resolve(rawName || '.')
+
+if (exists(to)) {
+  inquirer.prompt([{
+    type: 'confirm',
+    message: inPlace
+      ? 'Generate webapp in current directory?'
+      : 'Target directory exists. Continue?',
+    name: 'ok'
+  }]).then(function (answers) {
+    if (answers.ok) {
+      generate()
+    }
+  })
+} else {
+  generate()
+}
+
+//生成模版项目
+function generate(){
+  var metadata = {} //用户输入值
+
+
+  if( !(template &&  exists(template)) ){
+    console.error('Template does not exist')
+    return
+  }
+
+  var metapath = path.join( template,  'meta.json')
+  if( ! exists(metapath) ){
+    console.error('Template Folder must contain  a meta.json')
+    return
+  }
+
+  var meta = require( path.resolve(metapath) )
+  ask(meta.prompts, metadata, run)
+
+  function ask (prompts, data, done) {
+
+    async.eachSeries(Object.keys(prompts), function (key, next) {
+      prompt(data, key, prompts[key], next)
+    }, done)
+  }
+
+  function prompt (data, key, prompt, done) {
+    // skip prompts whose when condition is not met
+    inquirer.prompt([{
+      type: prompt.type,
+      name: key,
+      message: prompt.message || prompt.label || key,
+      default: prompt.default,
+      choices: prompt.choices || [],
+      validate: prompt.validate || function () { return true }
+    }]).then(function (answers) {
+      if (Array.isArray(answers[key])) {
+        data[key] = {}
+        answers[key].forEach(function (multiChoiceAnswer) {
+          data[key][multiChoiceAnswer] = true
+        })
+      } else {
+        data[key] = answers[key]
+      }
+      done()
+    })
+  }
+
+  /**
+   * Build.
+   */
+  function run(){
+    console.info('anwsers: ',   metadata)
+
+
+    var metalsmith = Metalsmith(__dirname)
+    .source( path.resolve(  path.join(template, 'template') ))
+    .destination(name)
+    .use(concat)
+    .build(function(err){
+      if (err) throw err;
+    });
+
+  /**
+   * Concat plugin.
+   *
+   * @param {Object} files
+   * @param {Metalsmith} metalsmith
+   * @param {Function} done
+   */
+
+    function concat(files, metalsmith, done){
+      // console.log(files, metalsmith.metadata(), done)
+      var css = '';
+
+
+      for (var file in files) {
+
+        // console.log( file, basename(file) )
+        var content = files[file].contents.toString()
+
+        delete files[file]
+
+
+        //fix
+        file = file.replace(/\\/g, '/');
+
+        var newContent = handlebars.compile(content)(metadata)
+        var newFile = handlebars.compile(file)(metadata).replace(/\//g, '\\')
+
+
+        console.log( file , newFile)
+
+        files[newFile] =  {contents: new Buffer( newContent)};
+      }
+
+      done();
+    }
+  }
+}
+
+
