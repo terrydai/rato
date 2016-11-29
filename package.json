@@ -10,6 +10,7 @@
     "scaffolding",
     "cli"
   ],
+  "bin": "bin/rato",
   "author": "terrydai",
   "license": "ISC",
   "dependencies": {

@@ -19,11 +19,11 @@ var handlebars = require('handlebars')
 
 program
   .usage('<template-name> [webapp-name]')
-  // .option('-c, --clone', 'use git clone')
 
 /**
  * Help.
  */
+
 
 program.on('--help', function () {
   console.log('  Examples:')
@@ -89,17 +89,16 @@ function generate(){
 
 
   if( !(template &&  exists(template)) ){
-    console.error('Template does not exist')
+    console.error( chalk.red('Error: Template does not exist') )
     return
   }
 
-  var metapath = path.join( template,  'meta.json')
-  if( ! exists(metapath) ){
-    console.error('Template Folder must contain  a meta.json')
-    return
-  }
-
+  var metapath = path.join( template,  'meta.js')
   var meta = require( path.resolve(metapath) )
+  if( ! exists(metapath) ){
+    console.error( chalk.red(`Error: Template Folder must contain  a meta.json or meta.js`) )
+    return
+  }
   ask(meta.prompts, metadata, run)
 
   function ask (prompts, data, done) {
@@ -163,19 +162,13 @@ function generate(){
 
         // console.log( file, basename(file) )
         var content = files[file].contents.toString()
-
         delete files[file]
-
 
         //fix
         file = file.replace(/\\/g, '/');
 
         var newContent = handlebars.compile(content)(metadata)
         var newFile = handlebars.compile(file)(metadata).replace(/\//g, '\\')
-
-
-        console.log( file , newFile)
-
         files[newFile] =  {contents: new Buffer( newContent)};
       }
 
