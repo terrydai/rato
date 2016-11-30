@@ -10,6 +10,10 @@
     "scaffolding",
     "cli"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/terrydai/rato.git"
+  },
   "bin": "bin/rato",
   "author": "terrydai",
   "license": "ISC",
