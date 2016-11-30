@@ -3,8 +3,12 @@ var {basename, extname} = path;
 var Metalsmith = require('metalsmith');
 var inquirer = require('inquirer');
 var async = require('async');
-var meta = require('./meta.json')
+// var meta = require('./meta.json')
 var handlebars = require('handlebars')
+var _ = require('lodash')
+var chalk = require('chalk')
+var metadata = {}
+
 
 
 function ask (prompts, data, done) {
@@ -32,22 +36,24 @@ function prompt (data, key, prompt, done) {
     } else {
       data[key] = answers[key]
     }
+
+    if( _.get(metadata, '_meta.hooks.afterPrompt')) {
+      metadata._meta.hooks.afterPrompt(metadata)
+    }
     done()
   })
 }
-
-var metadata = {}
-ask(meta.prompts, metadata, run)
 
 
 /**
  * Build.
  */
 function run(){
-  console.info('anwsers: ',   metadata)
-
+  // console.info('anwsers: ',   metadata)
 
   var metalsmith = Metalsmith(__dirname)
+  .source(metadata._source)
+  .destination(metadata._destination)
   .use(concat)
   .build(function(err){
     if (err) throw err;
@@ -66,6 +72,8 @@ function run(){
     var css = '';
 
 
+    console.log()
+    console.log( chalk.blue('# Copy files'))
     for (var file in files) {
 
       // console.log( file, basename(file) )
@@ -75,17 +83,45 @@ function run(){
 
 
       //fix
-      file = file.replace(/\\/g, '/');
+      // file = file.replace(/\\/g, '/');
+      var newContent = content
+      try{
+        newContent = handlebars.compile(content)(metadata)
+      }catch(e){
+        //throws errors
+        console.error( chalk.yellow("[WARN]", `${file} compiles failed, use the original file instead`) )
+        // continue
+      }
 
-      var newContent = handlebars.compile(content)(metadata)
-      var newFile = handlebars.compile(file)(metadata).replace(/\//g, '\\')
+      //file replacement
 
+      // var newFile = handlebars.compile(file)(metadata).replace(/\//g, '\\')
+      var pairs = file.split(path.sep).map(function(p){
+        return handlebars.compile(p)(metadata)
+      })
+      var newFile = pairs.join(path.sep)
 
-      console.log( file , newFile)
+      console.log( chalk.green("[OK]") , file , " =======>  ",  newFile)
 
       files[newFile] =  {contents: new Buffer( newContent)};
     }
 
     done();
   }
+}
+
+
+
+module.exports = function(meta, source, destination){
+
+  metadata._meta = meta
+  metadata._source = source
+  metadata._destination = destination
+  metadata._destinationBaseName = path.basename(destination)
+
+  console.log(chalk.blue('# Setup a new webapp'))
+  if( _.get(metadata, '_meta.hooks.beforePrompt')) {
+    metadata._meta.hooks.beforePrompt(metadata)
+  }
+  ask( meta.prompts, metadata, run)
 }
